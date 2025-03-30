@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plan Interactif - Gare de Strasbourg</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        #map { height: 500px; }
+        .form-container { margin-top: 10px; }
+        .controls { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Plan Interactif de la Gare de Strasbourg</h2>
+    <div class="controls">
+        <button onclick="enableAdding()">Ajouter un Point</button>
+        <button onclick="clearAllMarkers()">Effacer Tous les Points</button>
+        <select id="mapStyle" onchange="changeMapStyle()">
+            <option value="plan">Plan</option>
+            <option value="relief">Relief</option>
+        </select>
+    </div>
+    <div id="map"></div>
+    <div class="form-container" id="form" style="display: none;">
+        <input type="text" id="pointName" placeholder="Nom du point">
+        <input type="text" id="pointDesc" placeholder="Description">
+        <input type="url" id="pointImage" placeholder="URL de l'image">
+        <button onclick="savePoint()">Enregistrer</button>
+    </div>
+    <script>
+        var map = L.map('map').setView([48.5846, 7.7348], 16);
+        var tileLayers = {
+            plan: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
+            relief: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png')
+        };
+        tileLayers.plan.addTo(map);
+        var markers = [];
+        var tempMarker;
+
+        function changeMapStyle() {
+            var selectedStyle = document.getElementById("mapStyle").value;
+            map.eachLayer(layer => map.removeLayer(layer));
+            tileLayers[selectedStyle].addTo(map);
+            markers.forEach(marker => marker.addTo(map));
+        }
+
+        function loadMarkers() {
+            var savedMarkers = JSON.parse(localStorage.getItem('markers')) || [];
+            savedMarkers.forEach(function(data) {
+                addMarker(data, false);
+            });
+        }
+
+        function saveMarkers() {
+            localStorage.setItem('markers', JSON.stringify(markers.map(m => m.options.data)));
+        }
+
+        function enableAdding() {
+            map.once('click', function(e) {
+                if (tempMarker) map.removeLayer(tempMarker);
+                tempMarker = L.marker(e.latlng).addTo(map);
+                document.getElementById('form').style.display = 'block';
+            });
+        }
+        
+        function savePoint() {
+            var name = document.getElementById('pointName').value;
+            var desc = document.getElementById('pointDesc').value;
+            var img = document.getElementById('pointImage').value;
+            if (!name) { alert("Le nom est requis !"); return; }
+            
+            var newMarker = addMarker({ name, desc, img, latlng: tempMarker.getLatLng() }, true);
+            map.removeLayer(tempMarker);
+            document.getElementById('form').style.display = 'none';
+        }
+
+        function addMarker(data, save = true) {
+            var marker = L.marker(data.latlng).addTo(map)
+                .bindPopup(getPopupContent(data, marker));
+            marker.options.data = data;
+            markers.push(marker);
+            if (save) saveMarkers();
+            return marker;
+        }
+
+        function getPopupContent(data, marker) {
+            return `<b>${data.name}</b><br>${data.desc}<br><img src='${data.img}' width='100'><br>
+                <button onclick='editMarker(${markers.indexOf(marker)})'>Modifier</button>
+                <button onclick='deleteMarker(${markers.indexOf(marker)})'>Supprimer</button>`;
+        }
+
+        function deleteMarker(index) {
+            if (index > -1) {
+                map.removeLayer(markers[index]);
+                markers.splice(index, 1);
+                saveMarkers();
+            }
+        }
+        
+        function clearAllMarkers() {
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            saveMarkers();
+        }
+        
+        function editMarker(index) {
+            var marker = markers[index];
+            var data = marker.options.data;
+            document.getElementById('pointName').value = data.name;
+            document.getElementById('pointDesc').value = data.desc;
+            document.getElementById('pointImage').value = data.img;
+            document.getElementById('form').style.display = 'block';
+            
+            document.querySelector('#form button').onclick = function() {
+                data.name = document.getElementById('pointName').value;
+                data.desc = document.getElementById('pointDesc').value;
+                data.img = document.getElementById('pointImage').value;
+                marker.setPopupContent(getPopupContent(data, marker));
+                saveMarkers();
+                document.getElementById('form').style.display = 'none';
+            };
+        }
+        
+        loadMarkers();
+    </script>
+</body>
+</html>
